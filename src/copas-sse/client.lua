@@ -29,7 +29,10 @@ local NULL = string.char(tonumber("00",16))
 local UTF8_BOM = string.char(tonumber("FE",16))..string.char(tonumber("FF",16))
 
 
---- Constants to match connection state. Eg. `if client.state == SSE_Client.states.CONNECTING then ...`.
+--- Current connection state. See `SSE_Client.states`.
+-- @field SSE_Client.readyState
+
+--- Constants to match `SSE_Client.readyState`. Eg. `if client.readyState == SSE_Client.states.CONNECTING then ...`.
 -- Values are; `CONNECTING`, `OPEN`, `CLOSED`.
 -- @field SSE_Client.states
 SSE_Client.states = setmetatable({
@@ -88,6 +91,7 @@ local function handle_message(self, lines)
   end
 
   if next(event) then
+    event.event = event.event or "message"  -- set default event type
     if event.data and not self.data_as_table then
       event.data = table.concat(event.data, LF) .. LF
     end
@@ -132,8 +136,8 @@ local function parse_chunk(self, chunk)
     return true
   end
 
-  if self.state == self.states.CONNECTING then
-    self.state = self.states.OPEN
+  if self.readyState == self.states.CONNECTING then
+    self.readyState = self.states.OPEN
   end
 
   if self.ignore_next_LF and chunk:sub(1,1) == LF then
@@ -200,7 +204,7 @@ end
 -- call return.
 -- @return true
 function SSE_Client:close()
-  self.state = self.states.CLOSED
+  self.readyState = self.states.CLOSED
   if self.socket then
     self.socket:close()
   end
@@ -234,7 +238,7 @@ function SSE_Client.new(opts)
   self.lbuffer = {}   -- line buffer
   self.sbuffer = ""   -- string buffer
   self.ignore_next_LF = false
-  self.state = self.states.CLOSED
+  self.readyState = self.states.CLOSED
 
   if opts.last_event_id ~= nil and type(opts.last_event_id) ~= string then
     error("expected 'last_event_id' to be a string value", 2)
@@ -261,10 +265,10 @@ end
 -- `SSE_Client:close`.
 -- @return true
 function SSE_Client:start()
-  if self.state ~= self.states.CLOSED then
+  if self.readyState ~= self.states.CLOSED then
     return nil, "already started"
   end
-  self.state = self.states.CONNECTING
+  self.readyState = self.states.CONNECTING
 
   self.lbuffer = {}   -- line buffer
   self.sbuffer = ""   -- string buffer
@@ -300,7 +304,7 @@ function SSE_Client:start()
 
     local ok, resp_status = http_request(self.request)
 
-    if self.state == self.states.CLOSED then
+    if self.readyState == self.states.CLOSED then
       print("exiting, client was closed by user")
     elseif ok then
       print("request returned status: ", resp_status)
@@ -312,12 +316,12 @@ function SSE_Client:start()
       print("request failed with: ", resp_status)
     end
 
-    if self.state ~= self.states.CLOSED then
-      self.state = self.states.CONNECTING
+    if self.readyState ~= self.states.CLOSED then
+      self.readyState = self.states.CONNECTING
       copas.sleep(self.reconnect_delay)
     end
 
-  until self.state == self.states.CLOSED
+  until self.readyState == self.states.CLOSED
 
   return true
 end
