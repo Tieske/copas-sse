@@ -3,7 +3,7 @@
 <html>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
 <head>
-    <title>[module-name] docs</title>
+    <title>copas-sse docs</title>
     <link rel="stylesheet" href="ldoc.css" type="text/css" />
 </head>
 <body>
@@ -24,51 +24,69 @@
 
 <div id="navigation">
 <br/>
-<h1>[repo-name]</h1>
+<h1>copas-sse</h1>
 
 
 <h2>Contents</h2>
 <ul>
 <li><a href="#Functions">Functions</a></li>
+<li><a href="#Fields">Fields</a></li>
 </ul>
 
 
 <h2>Modules</h2>
 <ul class="nowrap">
-  <li><strong>project</strong></li>
+  <li><strong>copas-sse.client</strong></li>
 </ul>
 <h2>Topics</h2>
 <ul class="">
-  <li><a href="topics/01-introduction.md.html">1. Introduction</a></li>
-  <li><a href="topics/02-advanced.md.html">2. Advanced topic</a></li>
   <li><a href="topics/CHANGELOG.md.html">CHANGELOG</a></li>
   <li><a href="topics/LICENSE.html">LICENSE</a></li>
 </ul>
 <h2>Examples</h2>
 <ul class="nowrap">
-  <li><a href="examples/example1.lua.html">example1.lua</a></li>
+  <li><a href="examples/philips-hue.lua.html">philips-hue.lua</a></li>
 </ul>
 
 </div>
 
 <div id="content">
 
-<h1>Module <code>project</code></h1>
-<p>This module does something.</p>
-<p> Explain some basics, or the design.</p>
+<h1>Module <code>copas-sse.client</code></h1>
+<p>Server Side Events client for Copas.</p>
+<p> According to <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#parsing-an-event-stream">this specification</a>.</p>
+
+<p> For usage see the <a href="examples/philips-hue.lua.html"><a href="examples/philips-hue.lua.html#">philips-hue.lua</a></a> example. It shows how to decouple the receiving thread
+ (executing the callbacks) and the actual handling thread. If it would not be decoupled, and the event handler would
+ take a long time (network timeout for example), then during that time, no new events would be received.</p>
     <h3>Info:</h3>
     <ul>
-        <li><strong>Copyright</strong>: Copyright (c) [copyright-year]-[copyright-year] [your-name]</li>
+        <li><strong>Copyright</strong>: Copyright (c) 2022-2022 Thijs Schreijer</li>
         <li><strong>License</strong>: MIT, see <a href="topics/LICENSE.html#">LICENSE</a>.</li>
-        <li><strong>Author</strong>: [your-name]</li>
+        <li><strong>Author</strong>: Thijs Schreijer</li>
     </ul>
 
 
 <h2><a href="#Functions">Functions</a></h2>
 <table class="function_list">
 	<tr>
-	<td class="name" nowrap><a href="#do_something">do_something (what[, force=false])</a></td>
-	<td class="summary">Does something.</td>
+	<td class="name" nowrap><a href="#SSE_Client.new">SSE_Client.new (opts)</a></td>
+	<td class="summary">Creates a new SSE client.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#SSE_Client:close">SSE_Client:close ()</a></td>
+	<td class="summary">Closes the connection.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#SSE_Client:start">SSE_Client:start ()</a></td>
+	<td class="summary">Starts the connection.</td>
+	</tr>
+</table>
+<h2><a href="#Fields">Fields</a></h2>
+<table class="function_list">
+	<tr>
+	<td class="name" nowrap><a href="#SSE_Client.states">SSE_Client.states</a></td>
+	<td class="summary">Constants to match connection state.</td>
 	</tr>
 </table>
 
@@ -80,46 +98,147 @@
 
     <dl class="function">
     <dt>
-    <a name = "do_something"></a>
-    <strong>do_something (what[, force=false])</strong>
+    <a name = "SSE_Client.new"></a>
+    <strong>SSE_Client.new (opts)</strong>
     </dt>
     <dd>
-    Does something.
- It will do what you tell it.
+    Creates a new SSE client. </p>
+
+<p> The callback functions both have signature <code>function(SSE_Client, msg)</code>. Where <code>msg</code> will
+ be a <a href="https://www.lua.org/manual/5.1/manual.html#5.4">string</a> in case of the comment callback, or a message object otherwise.</p>
+
+<p> The message object
+ can have up to 3 fields;  <code>&quot;id&quot;</code>, <code>&quot;event&quot;</code>, and <code>&quot;data&quot;</code>. The <code>data</code> field will have
+ multiple <code>data</code> lines concatenated with <code>LF</code>(x0A) (including the trailing one), in
+ conformance with the spec (unless <code>opts.data_as_table</code> has been set).
 
 
     <h3>Parameters:</h3>
     <ul>
-        <li><span class="parameter">what</span>
-            <span class="types"><a class="type" href="https://www.lua.org/manual/5.1/manual.html#5.4">string</a> or <span class="type">function</span></span>
-         the thing that has to be done
+        <li><span class="parameter">opts</span> Options table.
+        <ul>
+        <li><span class="parameter">url</span>
+            <span class="types"><a class="type" href="https://www.lua.org/manual/5.1/manual.html#5.4">string</a></span>
+         the url to connect to for the event stream.
         </li>
-        <li><span class="parameter">force</span>
-            <span class="types"><span class="type">boolean</span></span>
-         set to a truthy value to force it.
-         (<em>default</em> false)
+        <li><span class="parameter">headers</span>
+            <span class="types"><a class="type" href="https://www.lua.org/manual/5.1/manual.html#5.5">table</a></span>
+         table of headers to include in the request.
+         (<em>optional</em>)
         </li>
+        <li><span class="parameter">cb_message</span>
+            <span class="types"><span class="type">function</span></span>
+         the callback function to deliver incoming events to.
+         (<em>optional</em>)
+        </li>
+        <li><span class="parameter">cb_comment</span>
+            <span class="types"><span class="type">function</span></span>
+         the callback function to deliver incoming comments to.
+         (<em>optional</em>)
+        </li>
+        <li><span class="parameter">last_event_id</span>
+            <span class="types"><a class="type" href="https://www.lua.org/manual/5.1/manual.html#5.4">string</a></span>
+         The last event ID to pass to the server when initiating the stream..
+         (<em>optional</em>)
+        </li>
+        <li><span class="parameter">timeout</span>
+            <span class="types"><span class="type">number</span></span>
+         the timeout (seconds) to use for connecting to the stream.
+         (<em>default</em> 30)
+        </li>
+        <li><span class="parameter">next_event_timeout</span>
+            <span class="types"><span class="type">number</span></span>
+         the timeout (seconds) between 2 succesive events.
+         (<em>default</em> 300)
+        </li>
+        <li><span class="parameter">reconnect_delay</span>
+            <span class="types"><span class="type">number</span></span>
+         delay (seconds) before reconnecting after a lost connection.
+ This is the initial setting, it can be overridden by the server if it sends a new value.
+         (<em>default</em> 3)
+        </li>
+        <li><span class="parameter">data_as_table</span>
+            <span class="types"><span class="type">bool</span></span>
+         if truthy, the <code>data</code> field in the messages will an array of strings,
+ without the LF line terminators. Otherwise it will be a <code>LF</code> separated/terminated string.
+         (<em>optional</em>)
+        </li>
+        </li></ul>
     </ul>
 
     <h3>Returns:</h3>
     <ol>
-        <li>
-           <span class="types"><span class="type">boolean</span></span>
-        success</li>
-        <li>
-           <span class="types"><span class="type">nil</span> or <a class="type" href="https://www.lua.org/manual/5.1/manual.html#5.4">string</a></span>
-        error message on failure</li>
+
+        new client object
     </ol>
 
 
 
-    <h3>Usage:</h3>
-    <ul>
-        <pre class="example"><span class="keyword">local</span> success, err = project.do_something(<span class="string">"tell a lie"</span>, <span class="keyword">true</span>)
-<span class="keyword">if</span> <span class="keyword">not</span> success <span class="keyword">then</span>
-    <span class="global">print</span>(<span class="string">"failed at lying; "</span>, err)
-<span class="keyword">end</span></pre>
-    </ul>
+
+</dd>
+    <dt>
+    <a name = "SSE_Client:close"></a>
+    <strong>SSE_Client:close ()</strong>
+    </dt>
+    <dd>
+    Closes the connection.
+ Call this function to exit the event stream and have the <a href="index.html#SSE_Client:start">SSE_Client:start</a>
+ call return.
+
+
+
+    <h3>Returns:</h3>
+    <ol>
+
+        true
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "SSE_Client:start"></a>
+    <strong>SSE_Client:start ()</strong>
+    </dt>
+    <dd>
+    Starts the connection.
+ Will start the request and keep looping/retrying to handle events. In case of
+ network failures it will automatically reconnect and use the <code>last_event_id</code>
+ to resume events.</p>
+
+<p> <strong>NOTE</strong>: This function will NOT return until the connection is closed by calling
+ <a href="index.html#SSE_Client:close">SSE_Client:close</a>.
+
+
+
+    <h3>Returns:</h3>
+    <ol>
+
+        true
+    </ol>
+
+
+
+
+</dd>
+</dl>
+    <h2 class="section-header "><a name="Fields"></a>Fields</h2>
+
+    <dl class="function">
+    <dt>
+    <a name = "SSE_Client.states"></a>
+    <strong>SSE_Client.states</strong>
+    </dt>
+    <dd>
+    Constants to match connection state.  Eg. <code>if client.state == SSE_Client.states.CONNECTING then ...</code>.
+ Values are; <code>CONNECTING</code>, <code>OPEN</code>, <code>CLOSED</code>.
+
+
+
+
+
+
 
 </dd>
 </dl>
@@ -129,7 +248,7 @@
 </div> <!-- id="main" -->
 <div id="about">
 <i>generated by <a href="http://github.com/stevedonovan/LDoc">LDoc 1.4.6</a></i>
-<i style="float:right;">Last updated 2022-08-21 13:16:42 </i>
+<i style="float:right;">Last updated 2022-08-25 20:37:37 </i>
 </div> <!-- id="about" -->
 </div> <!-- id="container" -->
 </body>
