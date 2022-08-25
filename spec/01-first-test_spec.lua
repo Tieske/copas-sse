@@ -1,9 +1,11 @@
 describe("description", function()
 
-  local mymod = require "copas-sse"
+  local SSE_Client = require "copas-sse.client"
 
   it("replace this file with your own tests", function()
-    mymod.do_something("tell a lie!", true)
+    assert.is.Not.Nil(SSE_Client._VERSION)
+    assert.is.Not.Nil(SSE_Client._COPYRIGHT)
+    assert.is.Not.Nil(SSE_Client._DESCRIPTION)
   end)
 
 end)
