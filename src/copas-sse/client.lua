@@ -16,7 +16,6 @@ SSE_Client._VERSION = "0.0.1"
 SSE_Client._COPYRIGHT = "Copyright (c) 2022-2022 Thijs Schreijer"
 SSE_Client._DESCRIPTION = "Lua Server-Side-Event client for use with the Copas scheduler"
 
-
 local copas = require "copas"
 local http = require("copas.http")
 local http_request = http.request
@@ -29,11 +28,20 @@ local NULL = string.char(tonumber("00",16))
 local UTF8_BOM = string.char(tonumber("FE",16))..string.char(tonumber("FF",16))
 
 
+--- The LuaLogging compatible logger in use. If [LuaLogging](https://lunarmodules.github.io/lualogging/)
+-- was loaded then it will use the `defaultLogger()`, otherwise a stub.
+-- The logger can be replaced, to customize the logging.
+-- @field SSE_Client.url
+SSE_Client.log = require("copas-sse.log")
+
+
 --- Current connection state (read-only). See `SSE_Client.states`.
 -- @field SSE_Client.readyState
 
+
 --- The url providing the stream (read-only).
 -- @field SSE_Client.url
+
 
 --- Constants to match `SSE_Client.readyState` (read-only). Eg. `if client.readyState ==
 -- SSE_Client.states.CONNECTING then ...`.
@@ -83,14 +91,16 @@ local function handle_message(self, lines)
     elseif field == "retry" then
       if value:match("^%d+$") then
         self.reconnect_delay = tonumber(value) / 1000 -- convert to seconds
+        self.log:info("[SSE-client] received reconnect-delay: %s ms", value)
       end
 
     elseif field == "" then
-      -- comment
-      self:oncomment(line:gsub("^:%s?", ""))
+      local comment = line:gsub("^:%s?", "")
+      self:oncomment(comment)
+      self.log:debug("[SSE-client] received comment: %s", comment)
 
-    -- else
-      -- ignore, log something?
+    else
+      self.log:warn("[SSE-client] received bad line: '%s'", line)
     end
   end
 
@@ -142,6 +152,7 @@ local function parse_chunk(self, chunk)
 
   if self.readyState == self.states.CONNECTING then
     self.readyState = self.states.OPEN
+    self.log:debug("[SSE-client] connection state: open")
   end
 
   if self.ignore_next_LF and chunk:sub(1,1) == LF then
@@ -212,6 +223,7 @@ function SSE_Client:close()
   if self.socket then
     self.socket:close()
   end
+  self.log:debug("[SSE-client] closing connection, connection state: closed")
   return true
 end
 
@@ -275,6 +287,7 @@ function SSE_Client:start()
     return nil, "already started"
   end
   self.readyState = self.states.CONNECTING
+  self.log:debug("[SSE-client] starting connection, connection state: connecting")
 
   self.lbuffer = {}   -- line buffer
   self.sbuffer = ""   -- string buffer
@@ -308,6 +321,7 @@ function SSE_Client:start()
       end
     }
 
+    self.log:debug("[SSE-client] initiating request: %s", self.url)
     local ok, resp_status = http_request(self.request)
 
     if self.readyState ~= self.states.CLOSED then
@@ -316,24 +330,30 @@ function SSE_Client:start()
 
       local msg
       if ok then
-        msg = "request returned status: " .. tostring(resp_status)
+        msg = "request terminated, returned status: " .. tostring(resp_status)
+        self.log:warn("[SSE-client] %s", msg)
 
       elseif resp_status == "timeout" and #self.lbuffer == 0 and self.sbuffer == "" then
         msg = "timeout while connecting, or waiting for next event"
+        self.log:warn("[SSE-client] %s", msg)
 
       elseif resp_status == "timeout" then
         msg = "timeout while receiving event data"
+        self.log:error("[SSE-client] %s", msg)
 
       else
         msg = "request failed with: " .. tostring(resp_status)
+        self.log:error("[SSE-client] %s", msg)
       end
       self:onerror(msg)
 
+      self.log:debug("[SSE-client] reconnecting in %d seconds", self.reconnect_delay)
       copas.sleep(self.reconnect_delay)
     end
 
   until self.readyState == self.states.CLOSED
 
+  self.log:debug("[SSE-client] connection finished")
   return true
 end
 

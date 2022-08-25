@@ -33,6 +33,7 @@ build = {
 
   modules = {
     ["copas-sse.client"] = "src/copas-sse/client.lua",
+    ["copas-sse.log"] = "src/copas-sse/log.lua",
   },
 
   copy_directories = {

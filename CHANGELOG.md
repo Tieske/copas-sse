@@ -19,6 +19,10 @@
   `luarocks install copas-sse`
 
 
-### Version 0.1.0, released 25-Aug-2022
+### Version 0.1.0, unreleased
+
+  - Added: logging
+
+### Version 0.0.1, released 25-Aug-2022
 
   - initial release

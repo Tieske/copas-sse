@@ -4,6 +4,7 @@
 local BRIDGE_IP = assert(os.getenv("HUE_IP"), "please set env var 'HUE_IP'")
 local API_KEY = assert(os.getenv("HUE_KEY"), "please set env var 'HUE_KEY'")
 
+require "logging" -- pre-load lualogging to enable logs
 
 local SSE_Client = require "copas-sse/client"
 local Queue = require "copas.queue"
