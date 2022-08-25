@@ -32,7 +32,7 @@ copas.addthread(function()
   client = SSE_Client.new {
     url = "https://" .. BRIDGE_IP .. "/eventstream/clip/v2",
     headers = { ["Hue-Application-Key"] = API_KEY },
-    cb_message = function(self, msg) event_queue:push(msg) end,
+    onmessage = function(self, msg) event_queue:push(msg) end,
   }
 
   client:start()  -- this will not return until the client gets closed

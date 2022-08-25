@@ -29,10 +29,14 @@ local NULL = string.char(tonumber("00",16))
 local UTF8_BOM = string.char(tonumber("FE",16))..string.char(tonumber("FF",16))
 
 
---- Current connection state. See `SSE_Client.states`.
+--- Current connection state (read-only). See `SSE_Client.states`.
 -- @field SSE_Client.readyState
 
---- Constants to match `SSE_Client.readyState`. Eg. `if client.readyState == SSE_Client.states.CONNECTING then ...`.
+--- The url providing the stream (read-only).
+-- @field SSE_Client.url
+
+--- Constants to match `SSE_Client.readyState` (read-only). Eg. `if client.readyState ==
+-- SSE_Client.states.CONNECTING then ...`.
 -- Values are; `CONNECTING`, `OPEN`, `CLOSED`.
 -- @field SSE_Client.states
 SSE_Client.states = setmetatable({
@@ -83,7 +87,7 @@ local function handle_message(self, lines)
 
     elseif field == "" then
       -- comment
-      self:cb_comment(line:gsub("^:%s?", ""))
+      self:oncomment(line:gsub("^:%s?", ""))
 
     -- else
       -- ignore, log something?
@@ -96,7 +100,7 @@ local function handle_message(self, lines)
       event.data = table.concat(event.data, LF) .. LF
     end
 
-    self:cb_message(event)
+    self:onmessage(event)
   end
 end
 
@@ -213,8 +217,8 @@ end
 
 --- Creates a new SSE client.
 --
--- The callback functions both have signature `function(SSE_Client, msg)`. Where `msg` will
--- be a `string` in case of the comment callback, or a message object otherwise.
+-- The callback functions have signature `function(SSE_Client, msg)`. Where `msg` will
+-- be a `string` in case of the comment and error callbacks, and a message object otherwise.
 --
 -- The message object
 -- can have up to 3 fields;  `"id"`, `"event"`, and `"data"`. The `data` field will have
@@ -223,8 +227,9 @@ end
 -- @tparam table opts Options table.
 -- @tparam string opts.url the url to connect to for the event stream.
 -- @tparam[opt] table opts.headers table of headers to include in the request.
--- @tparam[opt] function opts.cb_message the callback function to deliver incoming events to.
--- @tparam[opt] function opts.cb_comment the callback function to deliver incoming comments to.
+-- @tparam[opt] function opts.onmessage the callback function to deliver incoming events to.
+-- @tparam[opt] function opts.oncomment the callback function to deliver incoming comments to.
+-- @tparam[opt] function opts.onerror the callback function to deliver errors to.
 -- @tparam[opt] string opts.last_event_id The last event ID to pass to the server when initiating the stream..
 -- @tparam[opt=30] number opts.timeout the timeout (seconds) to use for connecting to the stream.
 -- @tparam[opt=300] number opts.next_event_timeout the timeout (seconds) between 2 succesive events.
@@ -249,8 +254,9 @@ function SSE_Client.new(opts)
   self.headers = opts.headers or {}
   self.reconnect_delay = opts.reconnect_delay or 3 -- in seconds
   self.url = assert(opts.url, "expected a 'url' option")
-  self.cb_message = opts.cb_message or function() end  -- function(sse_client, msg)
-  self.cb_comment = opts.cb_comment or function() end  -- function(sse_client, comment)
+  self.onmessage = opts.onmessage or function() end  -- function(sse_client, msg)
+  self.oncomment = opts.oncomment or function() end  -- function(sse_client, comment)
+  self.onerror = opts.onerror or function() end      -- function(sse_client, err-msg)
   self.data_as_table = not not opts.data_as_table
   return self
 end
@@ -304,20 +310,25 @@ function SSE_Client:start()
 
     local ok, resp_status = http_request(self.request)
 
-    if self.readyState == self.states.CLOSED then
-      print("exiting, client was closed by user")
-    elseif ok then
-      print("request returned status: ", resp_status)
-    elseif resp_status == "timeout" and #self.lbuffer == 0 and self.sbuffer == "" then
-      print("timeout while connecting, or waiting for next event")
-    elseif resp_status == "timeout" then
-      print("timeout while receiving event data")
-    else
-      print("request failed with: ", resp_status)
-    end
-
     if self.readyState ~= self.states.CLOSED then
+      -- error happened, and we need to reconnect
       self.readyState = self.states.CONNECTING
+
+      local msg
+      if ok then
+        msg = "request returned status: " .. tostring(resp_status)
+
+      elseif resp_status == "timeout" and #self.lbuffer == 0 and self.sbuffer == "" then
+        msg = "timeout while connecting, or waiting for next event"
+
+      elseif resp_status == "timeout" then
+        msg = "timeout while receiving event data"
+
+      else
+        msg = "request failed with: " .. tostring(resp_status)
+      end
+      self:onerror(msg)
+
       copas.sleep(self.reconnect_delay)
     end
 
