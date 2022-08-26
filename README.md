@@ -4,7 +4,7 @@
 
 # copas-sse
 
-Lua Server-Side-Event client for use with the Copas scheduler
+Lua Server-Sent-Events client for use with the Copas scheduler
 
 ## License and copyright
 

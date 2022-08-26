@@ -15,9 +15,9 @@ source = {
 }
 
 description = {
-  summary = "Lua Server-Side-Event client for use with the Copas scheduler",
+  summary = "Lua Server-Sent-Events client for use with the Copas scheduler",
   detailed = [[
-    Lua Server-Side-Event client for use with the Copas scheduler
+    Lua Server-Sent-Events client for use with the Copas scheduler
   ]],
   license = "MIT",
   homepage = "https://github.com/"..github_account_name.."/"..github_repo_name,

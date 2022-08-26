@@ -1,6 +1,6 @@
 project='copas-sse'
 title='copas-sse docs'
-description='Lua Server-Side-Event client for use with the Copas scheduler'
+description='Lua Server-Sent-Events client for use with the Copas scheduler'
 
 format='markdown'
 use_markdown_titles = true
