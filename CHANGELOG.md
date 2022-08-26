@@ -19,7 +19,7 @@
   `luarocks install copas-sse`
 
 
-### Version 0.1.0, unreleased
+### Version 0.0.2, released 26-Aug-2022
 
   - Added: logging
   - Change: format of 'data' field to the more sane format by MDN. But leaving
