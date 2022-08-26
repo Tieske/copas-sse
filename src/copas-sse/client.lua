@@ -12,7 +12,7 @@
 
 local SSE_Client = {}
 SSE_Client.__index = SSE_Client
-SSE_Client._VERSION = "0.0.1"
+SSE_Client._VERSION = "0.0.2"
 SSE_Client._COPYRIGHT = "Copyright (c) 2022-2022 Thijs Schreijer"
 SSE_Client._DESCRIPTION = "Lua Server-Sent-Events client for use with the Copas scheduler"
 
