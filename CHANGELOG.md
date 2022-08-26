@@ -22,6 +22,8 @@
 ### Version 0.1.0, unreleased
 
   - Added: logging
+  - Change: format of 'data' field to the more sane format by MDN. But leaving
+    options for table and the WHATWG format.
 
 ### Version 0.0.1, released 25-Aug-2022
 

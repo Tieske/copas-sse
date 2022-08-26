@@ -58,6 +58,23 @@ SSE_Client.states = setmetatable({
 })
 
 
+local data_formatters = setmetatable({
+  mdn = function(data)
+    return table.concat(data, "\n")
+  end,
+  whatwg = function(data)
+    return table.concat(data, LF) .. LF
+  end,
+  table = function(data)
+    return data
+  end,
+}, {
+  __index = function(self, key)
+    error("'"..tostring(key).."' is not a valid data format")
+  end,
+})
+
+
 -- handles an array of lines as a single event/message
 local function handle_message(self, lines)
   local event = {}
@@ -106,8 +123,8 @@ local function handle_message(self, lines)
 
   if next(event) then
     event.event = event.event or "message"  -- set default event type
-    if event.data and not self.data_as_table then
-      event.data = table.concat(event.data, LF) .. LF
+    if event.data then
+      event.data = data_formatters[self.data_format](event.data)
     end
 
     self:onmessage(event)
@@ -233,9 +250,17 @@ end
 -- be a `string` in case of the comment and error callbacks, and a message object otherwise.
 --
 -- The message object
--- can have up to 3 fields;  `"id"`, `"event"`, and `"data"`. The `data` field will have
--- multiple `data` lines concatenated with `LF`(x0A) (including the trailing one), in
--- conformance with the spec (unless `opts.data_as_table` has been set).
+-- can have up to 3 fields;  `"id"`, `"event"`, and `"data"`.
+--
+-- The format of the returned `data` field depends on the `opts.data_format` option:
+--
+-- - `"mdn"` (the default): uses [Mozilla](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#event_stream_format)
+--   format; lines concatenated with a newline (in Lua `"\n"` string), without a trailing one.
+--
+-- - `"whatwg"`: uses [WHATWG](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)
+--   format; lines concatenated (and trailed by) a single `LF` (x0A) character.
+--
+-- - `"table"`: an array of strings without trailing newline characters.
 -- @tparam table opts Options table.
 -- @tparam string opts.url the url to connect to for the event stream.
 -- @tparam[opt] table opts.headers table of headers to include in the request.
@@ -247,8 +272,7 @@ end
 -- @tparam[opt=300] number opts.next_event_timeout the timeout (seconds) between 2 succesive events.
 -- @tparam[opt=3] number opts.reconnect_delay delay (seconds) before reconnecting after a lost connection.
 -- This is the initial setting, it can be overridden by the server if it sends a new value.
--- @tparam[opt] bool opts.data_as_table if truthy, the `data` field in the messages will an array of strings,
--- without the LF line terminators. Otherwise it will be a `LF` separated/terminated string.
+-- @tparam[opt="mdn"] string opts.data_format one of `"table"`, `"mdn"`, or `"whatwg"`.
 -- @return new client object
 function SSE_Client.new(opts)
   local self = setmetatable({}, SSE_Client)
@@ -269,7 +293,7 @@ function SSE_Client.new(opts)
   self.onmessage = opts.onmessage or function() end  -- function(sse_client, msg)
   self.oncomment = opts.oncomment or function() end  -- function(sse_client, comment)
   self.onerror = opts.onerror or function() end      -- function(sse_client, err-msg)
-  self.data_as_table = not not opts.data_as_table
+  self.data_format = not not opts.data_format
   return self
 end
 
