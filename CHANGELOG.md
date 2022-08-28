@@ -19,6 +19,10 @@
   `luarocks install copas-sse`
 
 
+### Version 0.0.3, released 28-Aug-2022
+
+  - rewrote the interface, integrates queue creation/destruction
+
 ### Version 0.0.2, released 26-Aug-2022
 
   - Added: logging

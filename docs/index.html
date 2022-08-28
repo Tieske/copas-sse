@@ -56,9 +56,7 @@
 <p>Server-Sent-Events client for Copas.</p>
 <p> According to <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#parsing-an-event-stream">this specification</a>.</p>
 
-<p> For usage see the <a href="examples/philips-hue.lua.html"><a href="examples/philips-hue.lua.html#">philips-hue.lua</a></a> example. It shows how to decouple the receiving thread
- (executing the callbacks) and the actual handling thread. If it would not be decoupled, and the event handler would
- take a long time (network timeout for example), then during that time, no new events would be received.</p>
+<p> For usage see the <a href="examples/philips-hue.lua.html"><a href="examples/philips-hue.lua.html#">philips-hue.lua</a></a> example.</p>
     <h3>Info:</h3>
     <ul>
         <li><strong>Copyright</strong>: Copyright (c) 2022-2022 Thijs Schreijer</li>
@@ -74,7 +72,7 @@
 	<td class="summary">Creates a new SSE client.</td>
 	</tr>
 	<tr>
-	<td class="name" nowrap><a href="#SSE_Client:close">SSE_Client:close ()</a></td>
+	<td class="name" nowrap><a href="#SSE_Client:close">SSE_Client:close ([timeout])</a></td>
 	<td class="summary">Closes the connection.</td>
 	</tr>
 	<tr>
@@ -89,12 +87,12 @@
 	<td class="summary">The LuaLogging compatible logger in use.</td>
 	</tr>
 	<tr>
-	<td class="name" nowrap><a href="#SSE_Client.readyState">SSE_Client.readyState</a></td>
+	<td class="name" nowrap><a href="#SSE_Client.state">SSE_Client.state</a></td>
 	<td class="summary">Current connection state (read-only).</td>
 	</tr>
 	<tr>
 	<td class="name" nowrap><a href="#SSE_Client.states">SSE_Client.states</a></td>
-	<td class="summary">Constants to match <a href="index.html#SSE_Client.readyState">SSE_Client.readyState</a> (read-only).</td>
+	<td class="summary">Constants to match <a href="index.html#SSE_Client.state">SSE_Client.state</a> (read-only).</td>
 	</tr>
 	<tr>
 	<td class="name" nowrap><a href="#SSE_Client.url">SSE_Client.url</a></td>
@@ -117,21 +115,19 @@
 
 <p>Creates a new SSE client. </p>
 
-<p> The callback functions have signature <code>function(SSE_Client, msg)</code>. Where <code>msg</code> will
- be a <a href="https://www.lua.org/manual/5.1/manual.html#5.4">string</a> in case of the comment and error callbacks, and a message object otherwise.</p>
-
-<p> The message object
- can have up to 3 fields;  <code>&quot;id&quot;</code>, <code>&quot;event&quot;</code>, and <code>&quot;data&quot;</code>.</p>
-
-<p> The format of the returned <code>data</code> field depends on the <code>opts.data_format</code> option:</p>
+<p> The message objects will be pushed to the returned <code>Queue</code> instance. The message contains the following fields:</p>
 
 <ul>
-    <li><p><code>&quot;mdn&quot;</code> (the default): uses <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#event_stream_format">Mozilla</a>
-    format; lines concatenated with a newline (in Lua <code>&quot;\n&quot;</code> string), without a trailing one.</p></li>
-    <li><p><code>&quot;whatwg&quot;</code>: uses <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation">WHATWG</a>
-    format; lines concatenated (and trailed by) a single <code>LF</code> (x0A) character.</p></li>
-    <li><p><code>&quot;table&quot;</code>: an array of strings without trailing newline characters.</p></li>
+    <li><p><code>&quot;type&quot;</code>: one of <code>&quot;event&quot;</code> (incoming data), <code>&quot;comment&quot;</code> (incoming comment),
+    <code>&quot;connect&quot;</code> (connection state changed), or <code>&quot;error&quot;</code> (connection error happened).</p></li>
+    <li><p><code>&quot;id&quot;</code>: the event id (only for "event" types).</p></li>
+    <li><p><code>&quot;event&quot;</code>: event name (only for "event" types).</p></li>
+    <li><p><code>&quot;data&quot;</code> for "event" type: a string, or an array of strings (if option <code>data_as_table</code> was set).</p></li>
+    <li><p><code>&quot;data&quot;</code> for "comment" type: the comment (string).</p></li>
+    <li><p><code>&quot;data&quot;</code> for "connect" type: the new connection state (string) <code>&quot;connecting&quot;</code>, <code>&quot;open&quot;</code>, or <code>&quot;close&quot;</code>.</p></li>
+    <li><p><code>&quot;data&quot;</code> for "error" type: the error message (string).</p></li>
 </ul>
+
 
 
 
@@ -146,21 +142,6 @@
         <li><span class="parameter">headers</span>
             <span class="types"><a class="type" href="https://www.lua.org/manual/5.1/manual.html#5.5">table</a></span>
          table of headers to include in the request.
-         (<em>optional</em>)
-        </li>
-        <li><span class="parameter">onmessage</span>
-            <span class="types"><span class="type">function</span></span>
-         the callback function to deliver incoming events to.
-         (<em>optional</em>)
-        </li>
-        <li><span class="parameter">oncomment</span>
-            <span class="types"><span class="type">function</span></span>
-         the callback function to deliver incoming comments to.
-         (<em>optional</em>)
-        </li>
-        <li><span class="parameter">onerror</span>
-            <span class="types"><span class="type">function</span></span>
-         the callback function to deliver errors to.
          (<em>optional</em>)
         </li>
         <li><span class="parameter">last_event_id</span>
@@ -184,10 +165,10 @@
  This is the initial setting, it can be overridden by the server if it sends a new value.
          (<em>default</em> 3)
         </li>
-        <li><span class="parameter">data_format</span>
-            <span class="types"><a class="type" href="https://www.lua.org/manual/5.1/manual.html#5.4">string</a></span>
-         one of <code>&quot;table&quot;</code>, <code>&quot;mdn&quot;</code>, or <code>&quot;whatwg&quot;</code>.
-         (<em>default</em> "mdn")
+        <li><span class="parameter">data_as_table</span>
+            <span class="types"><span class="type">bool</span></span>
+         return data as an array of lines.
+         (<em>default</em> false)
         </li>
         </li></ul>
     </ul>
@@ -204,19 +185,29 @@
 </dd>
     <dt>
     <a name = "SSE_Client:close"></a>
-    <strong>SSE_Client:close ()</strong>
+    <strong>SSE_Client:close ([timeout])</strong>
     </dt>
     <dd>
     Closes the connection.
- Call this function to exit the event stream and have the <a href="index.html#SSE_Client:start">SSE_Client:start</a>
- call return.
+ Call this function to exit the event stream. This will destroy the message-queue.
+ If a timeout is provided then the timeout will be passed to <code>queue:finish(timeout)</code>,
+ if omitted the queue will be destroyed by calling <code>queue:stop()</code>. See Copas
+ documentation for the difference.
 
 
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">timeout</span>
+            <span class="types"><span class="type">number</span></span>
+         Timeout in seconds.
+         (<em>optional</em>)
+        </li>
+    </ul>
 
     <h3>Returns:</h3>
     <ol>
 
-        true
+        results from <code>queue:stop</code> or <code>queue:finish</code>.
     </ol>
 
 
@@ -229,19 +220,18 @@
     </dt>
     <dd>
     Starts the connection.
- Will start the request and keep looping/retrying to handle events. In case of
- network failures it will automatically reconnect and use the <code>last_event_id</code>
- to resume events.</p>
+ Will start the http-request (in the background) and keep looping/retrying to read
+ events. In case of network failures it will automatically reconnect and use the
+ <code>last_event_id</code> to resume events.</p>
 
-<p> <strong>NOTE</strong>: This function will NOT return until the connection is closed by calling
- <a href="index.html#SSE_Client:close">SSE_Client:close</a>.
+<p> The returned queue (a <code>copas.queue</code> instance), will receive incoming events.
 
 
 
     <h3>Returns:</h3>
     <ol>
 
-        true
+        event-queue or <code>nil + &quot;already started&quot;</code>
     </ol>
 
 
@@ -269,8 +259,8 @@
 
 </dd>
     <dt>
-    <a name = "SSE_Client.readyState"></a>
-    <strong>SSE_Client.readyState</strong>
+    <a name = "SSE_Client.state"></a>
+    <strong>SSE_Client.state</strong>
     </dt>
     <dd>
     Current connection state (read-only).  See <a href="index.html#SSE_Client.states">SSE_Client.states</a>.
@@ -287,7 +277,7 @@
     <strong>SSE_Client.states</strong>
     </dt>
     <dd>
-    Constants to match <a href="index.html#SSE_Client.readyState">SSE_Client.readyState</a> (read-only).  Eg. <code>if client.readyState ==
+    Constants to match <a href="index.html#SSE_Client.state">SSE_Client.state</a> (read-only).  Eg. <code>if client.state ==
  SSE_Client.states.CONNECTING then ...</code>.
  Values are; <code>CONNECTING</code>, <code>OPEN</code>, <code>CLOSED</code>.
 
@@ -319,7 +309,7 @@
 </div> <!-- id="main" -->
 <div id="about">
 <i>generated by <a href="http://github.com/stevedonovan/LDoc">LDoc 1.4.6</a></i>
-<i style="float:right;">Last updated 2022-08-26 13:21:09 </i>
+<i style="float:right;">Last updated 2022-08-28 22:34:04 </i>
 </div> <!-- id="about" -->
 </div> <!-- id="container" -->
 </body>
