@@ -2,9 +2,7 @@
 --
 -- According to [this specification](https://html.spec.whatwg.org/multipage/server-sent-events.html#parsing-an-event-stream).
 --
--- For usage see the [`philips-hue.lua`](examples/philips-hue.lua.html) example. It shows how to decouple the receiving thread
--- (executing the callbacks) and the actual handling thread. If it would not be decoupled, and the event handler would
--- take a long time (network timeout for example), then during that time, no new events would be received.
+-- For usage see the [`philips-hue.lua`](examples/philips-hue.lua.html) example.
 --
 -- @copyright Copyright (c) 2022-2022 Thijs Schreijer
 -- @author Thijs Schreijer
@@ -19,6 +17,7 @@ SSE_Client._DESCRIPTION = "Lua Server-Sent-Events client for use with the Copas 
 local copas = require "copas"
 local http = require("copas.http")
 local http_request = http.request
+local Queue = require("copas.queue")
 
 
 local LF = string.char(tonumber("0A",16))
@@ -36,21 +35,21 @@ SSE_Client.log = require("copas-sse.log")
 
 
 --- Current connection state (read-only). See `SSE_Client.states`.
--- @field SSE_Client.readyState
+-- @field SSE_Client.state
 
 
 --- The url providing the stream (read-only).
 -- @field SSE_Client.url
 
 
---- Constants to match `SSE_Client.readyState` (read-only). Eg. `if client.readyState ==
+--- Constants to match `SSE_Client.state` (read-only). Eg. `if client.state ==
 -- SSE_Client.states.CONNECTING then ...`.
 -- Values are; `CONNECTING`, `OPEN`, `CLOSED`.
 -- @field SSE_Client.states
 SSE_Client.states = setmetatable({
-  CONNECTING = 0,
-  OPEN = 1,
-  CLOSED = 2,
+  CONNECTING = "connecting",
+  OPEN = "open",
+  CLOSED = "closed",
 }, {
   __index = function(self, key)
     error("'"..tostring(key).."' is not a valid state, use 'CONNECTING', 'OPEN', or 'CLOSED'", 2)
@@ -58,21 +57,15 @@ SSE_Client.states = setmetatable({
 })
 
 
-local data_formatters = setmetatable({
-  mdn = function(data)
-    return table.concat(data, "\n")
-  end,
-  whatwg = function(data)
-    return table.concat(data, LF) .. LF
-  end,
-  table = function(data)
-    return data
-  end,
-}, {
-  __index = function(self, key)
-    error("'"..tostring(key).."' is not a valid data format")
-  end,
-})
+local function set_state(self, new_state)
+  if self.state == new_state then return end
+  self.state = new_state
+  self.queue:push {
+    client = self,
+    type = "connect",
+    data = self.state,
+  }
+end
 
 
 -- handles an array of lines as a single event/message
@@ -113,7 +106,11 @@ local function handle_message(self, lines)
 
     elseif field == "" then
       local comment = line:gsub("^:%s?", "")
-      self:oncomment(comment)
+      self.queue:push {
+        client = self,
+        type = "comment",
+        data = comment,
+      }
       self.log:debug("[SSE-client] received comment: %s", comment)
 
     else
@@ -122,12 +119,13 @@ local function handle_message(self, lines)
   end
 
   if next(event) then
+    event.client = self
+    event.type = "event"
     event.event = event.event or "message"  -- set default event type
-    if event.data then
-      event.data = data_formatters[self.data_format](event.data)
+    if (not self.data_as_table) and event.data then
+      event.data = table.concat(event.data, "\n")
     end
-
-    self:onmessage(event)
+    self.queue:push(event)
   end
 end
 
@@ -167,8 +165,8 @@ local function parse_chunk(self, chunk)
     return true
   end
 
-  if self.readyState == self.states.CONNECTING then
-    self.readyState = self.states.OPEN
+  if self.state == self.states.CONNECTING then
+    set_state(self, SSE_Client.states.OPEN)
     self.log:debug("[SSE-client] connection state: open")
   end
 
@@ -232,54 +230,65 @@ end
 
 
 --- Closes the connection.
--- Call this function to exit the event stream and have the `SSE_Client:start`
--- call return.
--- @return true
-function SSE_Client:close()
-  self.readyState = self.states.CLOSED
+-- Call this function to exit the event stream. This will destroy the message-queue.
+-- If a timeout is provided then the timeout will be passed to `queue:finish(timeout)`,
+-- if omitted the queue will be destroyed by calling `queue:stop()`. See Copas
+-- documentation for the difference.
+-- @tparam[opt] number timeout Timeout in seconds.
+-- @return results from `queue:stop` or `queue:finish`.
+function SSE_Client:close(timeout)
+  self.log:debug("[SSE-client] closing connection")
+  set_state(self, SSE_Client.states.CLOSED)
   if self.socket then
     self.socket:close()
   end
-  self.log:debug("[SSE-client] closing connection, connection state: closed")
-  return true
+
+  -- yield one cycle, to allow the request to return after closing the socket. This
+  -- to prevent just returned events from erroring when adding to a 'destroyed' queue.
+  copas.sleep()
+
+  if timeout then
+    return self.queue:finish(timeout)
+  end
+  return self.queue:stop()
 end
+
 
 --- Creates a new SSE client.
 --
--- The callback functions have signature `function(SSE_Client, msg)`. Where `msg` will
--- be a `string` in case of the comment and error callbacks, and a message object otherwise.
+-- The message objects will be pushed to the returned `Queue` instance. The message contains the following fields:
 --
--- The message object
--- can have up to 3 fields;  `"id"`, `"event"`, and `"data"`.
+--  - `"type"`: one of `"event"` (incoming data), `"comment"` (incoming comment),
+--    `"connect"` (connection state changed), or `"error"` (connection error happened).
 --
--- The format of the returned `data` field depends on the `opts.data_format` option:
+--  - `"id"`: the event id (only for "event" types).
 --
--- - `"mdn"` (the default): uses [Mozilla](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events#event_stream_format)
---   format; lines concatenated with a newline (in Lua `"\n"` string), without a trailing one.
+--  - `"event"`: event name (only for "event" types).
 --
--- - `"whatwg"`: uses [WHATWG](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)
---   format; lines concatenated (and trailed by) a single `LF` (x0A) character.
+--  - `"data"` for "event" type: a string, or an array of strings (if option `data_as_table` was set).
 --
--- - `"table"`: an array of strings without trailing newline characters.
+--  - `"data"` for "comment" type: the comment (string).
+--
+--  - `"data"` for "connect" type: the new connection state (string) `"connecting"`, `"open"`, or `"close"`.
+--
+--  - `"data"` for "error" type: the error message (string).
+--
 -- @tparam table opts Options table.
 -- @tparam string opts.url the url to connect to for the event stream.
 -- @tparam[opt] table opts.headers table of headers to include in the request.
--- @tparam[opt] function opts.onmessage the callback function to deliver incoming events to.
--- @tparam[opt] function opts.oncomment the callback function to deliver incoming comments to.
--- @tparam[opt] function opts.onerror the callback function to deliver errors to.
 -- @tparam[opt] string opts.last_event_id The last event ID to pass to the server when initiating the stream..
 -- @tparam[opt=30] number opts.timeout the timeout (seconds) to use for connecting to the stream.
 -- @tparam[opt=300] number opts.next_event_timeout the timeout (seconds) between 2 succesive events.
 -- @tparam[opt=3] number opts.reconnect_delay delay (seconds) before reconnecting after a lost connection.
 -- This is the initial setting, it can be overridden by the server if it sends a new value.
--- @tparam[opt="mdn"] string opts.data_format one of `"table"`, `"mdn"`, or `"whatwg"`.
+-- @tparam[opt=false] bool opts.data_as_table return data as an array of lines.
 -- @return new client object
 function SSE_Client.new(opts)
   local self = setmetatable({}, SSE_Client)
   self.lbuffer = {}   -- line buffer
   self.sbuffer = ""   -- string buffer
   self.ignore_next_LF = false
-  self.readyState = self.states.CLOSED
+  self.state = self.states.CLOSED -- set directly, to not send event (bypass set_state)
 
   if opts.last_event_id ~= nil and type(opts.last_event_id) ~= string then
     error("expected 'last_event_id' to be a string value", 2)
@@ -290,27 +299,13 @@ function SSE_Client.new(opts)
   self.headers = opts.headers or {}
   self.reconnect_delay = opts.reconnect_delay or 3 -- in seconds
   self.url = assert(opts.url, "expected a 'url' option")
-  self.onmessage = opts.onmessage or function() end  -- function(sse_client, msg)
-  self.oncomment = opts.oncomment or function() end  -- function(sse_client, comment)
-  self.onerror = opts.onerror or function() end      -- function(sse_client, err-msg)
-  self.data_format = not not opts.data_format
+  self.data_as_table = not not opts.data_as_table
   return self
 end
 
 
---- Starts the connection.
--- Will start the request and keep looping/retrying to handle events. In case of
--- network failures it will automatically reconnect and use the `last_event_id`
--- to resume events.
---
--- **NOTE**: This function will NOT return until the connection is closed by calling
--- `SSE_Client:close`.
--- @return true
-function SSE_Client:start()
-  if self.readyState ~= self.states.CLOSED then
-    return nil, "already started"
-  end
-  self.readyState = self.states.CONNECTING
+local function start(self)
+  set_state(self, SSE_Client.states.CONNECTING)
   self.log:debug("[SSE-client] starting connection, connection state: connecting")
 
   self.lbuffer = {}   -- line buffer
@@ -348,9 +343,9 @@ function SSE_Client:start()
     self.log:debug("[SSE-client] initiating request: %s", self.url)
     local ok, resp_status = http_request(self.request)
 
-    if self.readyState ~= self.states.CLOSED then
+    if self.state ~= self.states.CLOSED then
       -- error happened, and we need to reconnect
-      self.readyState = self.states.CONNECTING
+      set_state(self, SSE_Client.states.CONNECTING)
 
       local msg
       if ok then
@@ -369,16 +364,41 @@ function SSE_Client:start()
         msg = "request failed with: " .. tostring(resp_status)
         self.log:error("[SSE-client] %s", msg)
       end
-      self:onerror(msg)
+      self.queue:push {
+        client = self,
+        type = "error",
+        data = msg,
+      }
 
       self.log:debug("[SSE-client] reconnecting in %d seconds", self.reconnect_delay)
       copas.sleep(self.reconnect_delay)
     end
 
-  until self.readyState == self.states.CLOSED
+  until self.state == self.states.CLOSED
 
   self.log:debug("[SSE-client] connection finished")
-  return true
+end
+
+
+--- Starts the connection.
+-- Will start the http-request (in the background) and keep looping/retrying to read
+-- events. In case of network failures it will automatically reconnect and use the
+-- `last_event_id` to resume events.
+--
+-- The returned queue (a `copas.queue` instance), will receive incoming events.
+-- @return event-queue or `nil + "already started"`
+function SSE_Client:start()
+  if self.state ~= self.states.CLOSED then
+    return nil, "already started"
+  end
+
+  self.queue = Queue.new {
+    name = "SSE queue " .. self.url
+  }
+
+  copas.addthread(start, self)
+
+  return self.queue
 end
 
 
