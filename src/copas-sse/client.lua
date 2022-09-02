@@ -293,7 +293,7 @@ function SSE_Client.new(opts)
   if opts.last_event_id ~= nil and type(opts.last_event_id) ~= string then
     error("expected 'last_event_id' to be a string value", 2)
   end
-  self.last_event_id = opts.last_event_id
+  self.last_event_id = opts.last_event_id or ""
   self.timeout = opts.timeout or 30
   self.next_event_timeout = opts.next_event_timeout or (5 * 60)
   self.headers = opts.headers or {}
