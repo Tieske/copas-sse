@@ -222,6 +222,9 @@ end
 
 local function sse_sink(self)
   local function sink(chunk)
+    -- TODO: on first chunk, check "Content-Type" header to be "text/event-stream", and status 200 if not
+    -- close and exit with an error (no retries). Copas http client doesn't support
+    -- passing headers here...
     parse_chunk(self, chunk)
     return 1
   end
@@ -320,6 +323,8 @@ local function start(self)
     headers["Accept"] = "text/event-stream"
     headers["Cache-Control"] = "no-cache"
     headers["Last-Event-ID`"] = self.last_event_id
+
+    -- TODO: do a callback here to allow for updating headers in case of expired tokens, etc.
 
     local creator
 
