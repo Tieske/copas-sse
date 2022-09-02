@@ -18,6 +18,9 @@
 - test the newly created rock:<br/>
   `luarocks install copas-sse`
 
+### unreleased
+
+  - Fix: added cache-control header to request
 
 ### Version 0.0.3, released 28-Aug-2022
 

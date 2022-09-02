@@ -318,6 +318,7 @@ local function start(self)
 
   repeat
     headers["Accept"] = "text/event-stream"
+    headers["Cache-Control"] = "no-cache"
     headers["Last-Event-ID`"] = self.last_event_id
 
     local creator
