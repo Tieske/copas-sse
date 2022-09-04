@@ -18,6 +18,8 @@ local copas = require "copas"
 local http = require("copas.http")
 local http_request = http.request
 local Queue = require("copas.queue")
+local Timer = require("copas.timer")
+local socket = require("socket")
 
 
 local LF = string.char(tonumber("0A",16))
@@ -165,6 +167,8 @@ local function parse_chunk(self, chunk)
     return true
   end
 
+  self.last_event_time = socket.gettime()
+
   if self.state == self.states.CONNECTING then
     set_state(self, SSE_Client.states.OPEN)
     self.log:debug("[SSE-client] connection state: open")
@@ -284,6 +288,8 @@ end
 -- @tparam[opt=300] number opts.next_event_timeout the timeout (seconds) between 2 succesive events.
 -- @tparam[opt=3] number opts.reconnect_delay delay (seconds) before reconnecting after a lost connection.
 -- This is the initial setting, it can be overridden by the server if it sends a new value.
+-- @tparam[opt] number|nil opts.event_timeout timeout (seconds) since last event, after which the socket
+-- is closed and reconnection is started. Default is "nil"; no timeout.
 -- @tparam[opt=false] bool opts.data_as_table return data as an array of lines.
 -- @return new client object
 function SSE_Client.new(opts)
@@ -296,6 +302,10 @@ function SSE_Client.new(opts)
   if opts.last_event_id ~= nil and type(opts.last_event_id) ~= string then
     error("expected 'last_event_id' to be a string value", 2)
   end
+  if opts.event_timeout then
+    assert(type(opts.event_timeout) == "number" and opts.event_timeout > 1,
+          "expected 'event_timeout' to be a number > 1 (or nil)")
+  end
   self.last_event_id = opts.last_event_id or ""
   self.timeout = opts.timeout or 30
   self.next_event_timeout = opts.next_event_timeout or (5 * 60)
@@ -303,6 +313,7 @@ function SSE_Client.new(opts)
   self.reconnect_delay = opts.reconnect_delay or 3 -- in seconds
   self.url = assert(opts.url, "expected a 'url' option")
   self.data_as_table = not not opts.data_as_table
+  self.event_timeout = opts.event_timeout
   return self
 end
 
@@ -315,6 +326,31 @@ local function start(self)
   self.sbuffer = ""   -- string buffer
   self.ignore_next_LF = false
   self.expect_utf8_bom = false
+  self.last_event_time = socket.gettime()
+  if self.event_timeout then
+    self.last_event_timer = Timer.new {
+      delay = self.event_timeout,
+      name = "Hue event-timeout",
+      callback = function()
+        if self.state ~= SSE_Client.states.OPEN then
+          -- not open, so delay for another round
+          self.last_event_timer:arm(self.event_timeout)
+          return
+        end
+        local t = socket.gettime()
+        local to = self.last_event_time + self.event_timeout
+        if to < t then
+          -- we've got a timeout
+          self.log:warn("[SSE-client] event-timeout, closing connection for reconnect")
+          self.socket:close()
+          self.last_event_timer:arm(self.event_timeout)
+          return
+        end
+        -- no timeout, reschedule timer based on last event
+        self.last_event_timer:arm(self.last_event_time + self.event_timeout - t)
+      end
+    }
+  end
 
   local headers = {}
   for k,v in pairs(self.headers) do headers[k] = v end
@@ -381,6 +417,11 @@ local function start(self)
     end
 
   until self.state == self.states.CLOSED
+
+  if self.last_event_timer then
+    self.last_event_timer:cancel()
+    self.last_event_timer = nil
+  end
 
   self.log:debug("[SSE-client] connection finished")
 end

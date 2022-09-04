@@ -21,6 +21,7 @@
 ### unreleased
 
   - Fix: added cache-control header to request
+  - Feat: add event_timeout option (reconnect if stream is idle for too long)
 
 ### Version 0.0.3, released 28-Aug-2022
 
