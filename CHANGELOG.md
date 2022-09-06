@@ -18,21 +18,23 @@
 - test the newly created rock:<br/>
   `luarocks install copas-sse`
 
-### unreleased
 
-  - Fix: added cache-control header to request
-  - Feat: add event_timeout option (reconnect if stream is idle for too long)
+### Version 0.1.0, released 06-Sep-2022
+
+- Fix: added cache-control header to request
+- Feat: add event_timeout option (reconnect if stream is idle for too long)
+- Dep: bump Copas dependency to 4.2
 
 ### Version 0.0.3, released 28-Aug-2022
 
-  - rewrote the interface, integrates queue creation/destruction
+- rewrote the interface, integrates queue creation/destruction
 
 ### Version 0.0.2, released 26-Aug-2022
 
-  - Added: logging
-  - Change: format of 'data' field to the more sane format by MDN. But leaving
-    options for table and the WHATWG format.
+- Added: logging
+- Change: format of 'data' field to the more sane format by MDN. But leaving
+  options for table and the WHATWG format.
 
 ### Version 0.0.1, released 25-Aug-2022
 
-  - initial release
+- initial release

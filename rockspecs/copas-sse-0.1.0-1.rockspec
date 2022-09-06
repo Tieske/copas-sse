@@ -1,5 +1,5 @@
 local package_name = "copas-sse"
-local package_version = "scm"
+local package_version = "0.1.0"
 local rockspec_revision = "1"
 local github_account_name = "Tieske"
 local github_repo_name = "copas-sse"
