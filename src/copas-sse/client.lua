@@ -26,7 +26,9 @@ local LF = string.char(tonumber("0A",16))
 local CR = string.char(tonumber("0D",16))
 local CRLF = CR..LF
 local NULL = string.char(tonumber("00",16))
-local UTF8_BOM = string.char(tonumber("FE",16))..string.char(tonumber("FF",16))
+local UTF8_BOM = string.char(tonumber("EF",16)) ..
+                 string.char(tonumber("BB",16)) ..
+                 string.char(tonumber("BF",16))
 
 
 --- The LuaLogging compatible logger in use. If [LuaLogging](https://lunarmodules.github.io/lualogging/)
@@ -194,16 +196,13 @@ local function parse_chunk(self, chunk)
   self.sbuffer = self.sbuffer .. chunk
 
   if self.expect_utf8_bom then
-    if #self.sbuffer < 2 then
-      -- this is safe, since every message is terminated by 2 LF's, so if the first
-      -- bytes we handle are less than 2, we can safely wait for more to appear.
-      -- Set short timeout while waiting for remainder
+    if #self.sbuffer < #UTF8_BOM then
       self.socket:settimeouts(nil, nil, self.timeout)
       return 1
     end
-    if self.sbuffer:sub(1,2) == UTF8_BOM then
+    if self.sbuffer:sub(1,#UTF8_BOM) == UTF8_BOM then
       -- drop the BOM characters
-      self.buffer = self.buffer:sub(3, -1)
+      self.buffer = self.buffer:sub(#UTF8_BOM+1, -1)
     end
     self.expect_utf8_bom = false
   end
