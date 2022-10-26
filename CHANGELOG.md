@@ -18,6 +18,9 @@
 - test the newly created rock:<br/>
   `luarocks install copas-sse`
 
+### Version 0.2.0, unreleased
+
+- Fix: switch to newer Copas version to use `pause` instead of `sleep`
 
 ### Version 0.1.0, released 06-Sep-2022
 

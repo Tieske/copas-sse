@@ -251,7 +251,7 @@ function SSE_Client:close(timeout)
 
   -- yield one cycle, to allow the request to return after closing the socket. This
   -- to prevent just returned events from erroring when adding to a 'destroyed' queue.
-  copas.sleep()
+  copas.pause(0)
 
   if timeout then
     return self.queue:finish(timeout)
@@ -412,7 +412,7 @@ local function start(self)
       }
 
       self.log:debug("[SSE-client] reconnecting in %d seconds", self.reconnect_delay)
-      copas.sleep(self.reconnect_delay)
+      copas.pause(self.reconnect_delay)
     end
 
   until self.state == self.states.CLOSED
